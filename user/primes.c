@@ -4,46 +4,36 @@
 
 #define MAX 35
 
-void sieve(int *fd) {
-    if (fork() == 0) {
-        
+void sieve(int read_fd) {
+    int pid = fork();
+    if (pid == 0) {
+
         /* Create pipe to send data to child process */
         int child_fd[2]; pipe(child_fd);
-
-        /* Close write end of parent pipe, since will
-            only write to child, not parent */
-        close(fd[1]);
-
 
         int first, num;
         /* Read first number from parent pipe, will always 
             be a prime */
-        if (read(fd[0], &first, sizeof(first)) > 0) {
+        if (read(read_fd, &first, sizeof(first)) > 0) {
             printf("prime %d\n", first);
 
             /* Read from parent pipe, write to child
                 if not divisible by first prime (sieve) */
-            while (read(fd[0], &num, sizeof(num)) > 0) {
+            while (read(read_fd, &num, sizeof(num)) > 0) {
                 if (num % first != 0) {
                     write(child_fd[1], &num, sizeof(num));
                 }
             }
-
+            close(child_fd[1]);
             /* Start new child process for next stage of pipeline */
-            sieve(child_fd);
+            sieve(child_fd[0]);
         }
-
-        /* Close read end of pipe */
-        close(fd[0]);
-
-        /* Wait for and child processes to complete */
-        wait();
-
         /* Exit child process */
         exit();
-    }
-    close(fd[0]); close(fd[1]);
-    wait();
+    } else if (pid > 0) {
+        close(read_fd);
+        wait();
+    } else printf("Fork error.\n");
 }
 
 int main() {
@@ -53,9 +43,10 @@ int main() {
     /* Seed the pipeline */
     for (int i = 2; i <= MAX; i++)
         write(fd[1], &i, sizeof(i));
+    close(fd[1]);
     
     /* call next pipeline */
-    sieve(fd);
+    sieve(fd[0]);
 
     exit();
 }
